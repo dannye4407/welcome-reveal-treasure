@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f4f6fb;font-family:"Segoe UI",sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;overflow-x:hidden;}
+#ui{width:100%;max-width:780px;padding:20px 16px 0;display:flex;flex-direction:column;align-items:center;gap:8px;}
+h1{color:#1a1a2e;font-size:24px;font-weight:700;text-align:center}
+#instruction{color:#555;font-size:14px;text-align:center;min-height:20px;padding:0 8px;}
+#picks-row{display:flex;gap:8px;align-items:center}
+#dots{display:flex;gap:4px}
+.pick-dot{font-size:20px;line-height:1;transition:opacity .3s,filter .3s;}
+.pick-dot.used{opacity:.25;filter:grayscale(1);}
+#picks-label{color:#6b7280;font-size:12px;margin-left:2px}
+
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;max-width:780px;padding:10px 16px;}
+
+.chest-cell{
+  display:flex;flex-direction:column;align-items:center;
+  position:relative;
+  height:130px;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+.chest-cell.picked{cursor:default;pointer-events:none;}
+
+/* prize card rises from chest centre */
+.prize-card{
+  position:absolute;
+  top:0;left:50%;
+  transform:translateX(-50%) translateY(50px) scale(0.5);
+  opacity:0;
+  width:82px;
+  background:#fff;
+  border:2px solid #2563eb;
+  border-radius:10px;
+  padding:6px 4px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  text-align:center;
+  box-shadow:0 6px 20px rgba(37,99,235,.25);
+  pointer-events:none;
+  z-index:10;
+}
+.pr-icon{font-size:20px;line-height:1}
+.pr-name{font-size:9px;font-weight:700;color:#1a1a2e;line-height:1.3}
+.pr-val{font-size:9px;color:#2563eb;font-weight:600}
+.pr-extra{font-size:8px;color:#16a34a;font-weight:700}
+
+/* chest image container */
+.chest-wrap{
+  position:absolute;
+  bottom:0;
+  width:100%;
+  display:flex;justify-content:center;
+  align-items:flex-end;
+}
+.chest-img{
+  width:100%;max-width:90px;
+  object-fit:contain;
+  /* remove grey checkerboard bg — mix-blend-mode cuts out near-white/grey */
+  mix-blend-mode:multiply;
+  transition:transform .15s ease, filter .2s ease;
+}
+/* open image stacked on top of closed, hidden by default */
+.chest-img-open{
+  position:absolute;
+  bottom:0;
+  max-width:90px;
+  width:100%;
+  object-fit:contain;
+  mix-blend-mode:multiply;
+  opacity:0;
+}
+.chest-cell:not(.picked):not(.highlighted):hover .chest-img{
+  transform:translateY(-10px) scale(1.14);
+  filter:drop-shadow(0 8px 14px rgba(37,99,235,.55));
+}
+.chest-cell.highlighted .chest-img{
+  transform:translateY(-12px) scale(1.16);
+  filter:drop-shadow(0 8px 16px rgba(37,99,235,.7));
+}
+
+/* sparkles */
+.sparkle{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;opacity:0;z-index:20;}
+
+#log-area{width:100%;max-width:780px;padding:0 16px 20px;}
+#log-title{color:#6b7280;font-size:12px;margin-bottom:5px;font-weight:600;letter-spacing:.5px}
+#log{display:flex;flex-direction:column;gap:5px}
+.log-entry{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;color:#374151;font-size:13px;display:flex;align-items:center;gap:8px;animation:fadeIn .4s ease;box-shadow:0 1px 4px rgba(0,0,0,.05);}
+.log-icon{font-size:15px}.log-prize{font-weight:600;color:#2563eb}.log-extra{color:#16a34a;font-size:11px;margin-left:4px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;padding:20px;}
+#modal-box{background:#fff;border-radius:16px;max-width:460px;width:100%;padding:32px 24px;text-align:center;transform:scale(0.8);opacity:0;transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .3s ease;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+#modal-box h2{color:#1a1a2e;font-size:22px;font-weight:700;margin:10px 0 16px;}
+#modal-prizes{font-size:14px;line-height:1.9;margin-bottom:20px;}
+.prize-pill{display:inline-block;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;margin:3px 4px;color:#1d4ed8;font-weight:600;}
+#modal-sub,#modal-tagline{color:#1a1a2e;font-size:15px;font-weight:600;margin-bottom:6px;}
+#modal-tagline{margin-bottom:24px;}
+#modal-btn{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px 28px;font-size:14px;font-weight:600;cursor:pointer;width:100%;}
+#modal-btn:hover{background:#1d4ed8;}
+
+@media(max-width:480px){
+  #grid{gap:8px;padding:10px;}
+  h1{font-size:20px}
+  .chest-cell{height:110px;}
+  .prize-card{width:70px;}
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <h1>Welcome Bonus</h1>
+  <div id="instruction">Pick 2 Chests and Win their Prizes!</div>
+  <div id="picks-row">
+    <div id="dots"></div>
+    <span id="picks-label">picks remaining</span>
+  </div>
+</div>
+
+<div id="grid"></div>
+
+<div id="log-area">
+  <div id="log-title">YOUR PRIZES</div>
+  <div id="log"></div>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div style="font-size:38px">🎉</div>
+    <h2>You've Won!</h2>
+    <div id="modal-prizes"></div>
+    <p id="modal-sub">These prizes have been added to your account.</p>
+    <p id="modal-tagline">Keep up the winning! 🏆</p>
+    <button id="modal-btn" onclick="closeModal()">Go to your Account</button>
+  </div>
+</div>
+
+<script>
+const PRIZES=[
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:false},
+  {label:"5 Free Entries",sub:"(£2.50 value)",icon:"🎟",extra:false},
+  {label:"£1.00 Bonus Credit",sub:"",icon:"💰",extra:false},
+  {label:"£5.00 Bonus Credit",sub:"",icon:"💰",extra:false},
+  {label:"Instant Silver VIP Status",sub:"",icon:"⭐",extra:false},
+  {label:"£3.00 Free Insta-Draw Credits",sub:"",icon:"🎰",extra:false},
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:true},
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:true},
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:true},
+  {label:"£1.00 Bonus Credit",sub:"",icon:"💰",extra:false},
+  {label:"£1.00 Bonus Credit",sub:"",icon:"💰",extra:false},
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:false},
+  {label:"5 Free Entries",sub:"(£2.50 value)",icon:"🎟",extra:false},
+  {label:"1 Free Entry",sub:"(£0.50 value)",icon:"🎟",extra:false},
+  {label:"5 Free Entries",sub:"(£2.50 value)",icon:"🎟",extra:false},
+  {label:"£1.00 Bonus Credit",sub:"",icon:"💰",extra:false},
+];
+
+const isTouchDevice=()=>window.matchMedia("(hover:none)").matches;
+let picksRemaining=2,totalPicks=2,pickCount=0,gameOver=false,wonPrizes=[],highlightedEl=null;
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+
+function updateDots(){
+  const dots=document.getElementById("dots");
+  dots.innerHTML="";
+  for(let i=0;i<totalPicks;i++){
+    const d=document.createElement("div");
+    d.className="pick-dot"+(i>=picksRemaining?" used":"");
+    d.textContent="🗝️";
+    dots.appendChild(d);
+  }
+  document.getElementById("picks-label").textContent=picksRemaining===1?"key remaining":"keys remaining";
+}
+function setInstruction(t){document.getElementById("instruction").textContent=t;}
+function addLog(prize,n){
+  const el=document.createElement("div");
+  el.className="log-entry";
+  const full=prize.label+(prize.sub?" "+prize.sub:"");
+      el.innerHTML=`<span class="log-icon">${prize.icon}</span><span>Key ${n}: <span class="log-prize">${full}</span>${prize.extra?'<span class="log-extra">+ Extra Key!</span>':''}</span>`;
+  document.getElementById("log").appendChild(el);
+}
+function showWinModal(){
+  document.getElementById("modal-prizes").innerHTML=wonPrizes.map(p=>`<span class="prize-pill">${p.icon} ${p.label}${p.sub?" "+p.sub:""}</span>`).join("");
+  const overlay=document.getElementById("modal-overlay"),box=document.getElementById("modal-box");
+  overlay.style.display="flex";
+  box.style.transform="scale(0.8)";box.style.opacity="0";
+  setTimeout(()=>{box.style.transform="scale(1)";box.style.opacity="1";},30);
+}
+function closeModal(){
+  const box=document.getElementById("modal-box");
+  box.style.transform="scale(0.8)";box.style.opacity="0";
+  setTimeout(()=>{document.getElementById("modal-overlay").style.display="none";init();},350);
+}
+
+function spawnSparkles(cell){
+  const colors=["#fbbf24","#f59e0b","#60a5fa","#34d399","#f472b6","#fff"];
+  for(let i=0;i<12;i++){
+    const s=document.createElement("div");
+    s.className="sparkle";
+    s.style.background=colors[i%colors.length];
+    cell.appendChild(s);
+    const angle=Math.random()*Math.PI*2;
+    const dist=28+Math.random()*45;
+    gsap.fromTo(s,
+      {opacity:1,x:cell.offsetWidth/2-4,y:55,scale:1+Math.random()},
+      {opacity:0,x:cell.offsetWidth/2-4+Math.cos(angle)*dist,y:55+Math.sin(angle)*dist,
+       scale:0,duration:0.55+Math.random()*0.35,ease:"power2.out",onComplete:()=>s.remove()}
+    );
+  }
+}
+
+function openChest(cell,prize){
+  if(gameOver||picksRemaining<=0||cell.classList.contains("picked"))return;
+  if(highlightedEl&&highlightedEl!==cell){
+    highlightedEl.classList.remove("highlighted");
+    highlightedEl=null;
+  }
+  cell.classList.add("picked");
+  highlightedEl=null;
+
+  const imgClosed=cell.querySelector(".chest-img");
+  const imgOpen=cell.querySelector(".chest-img-open");
+  const prizeCard=cell.querySelector(".prize-card");
+
+  gsap.timeline()
+    // brief bounce up
+    .to(imgClosed,{y:-8,duration:0.15,ease:"power2.out"})
+    // swap to open image
+    .to(imgClosed,{opacity:0,y:-8,duration:0.2,ease:"power1.in"})
+    .to(imgOpen,{opacity:1,y:0,duration:0.2,ease:"power1.out"},"-=0.1")
+    .call(()=>spawnSparkles(cell))
+    // prize rises out of chest
+    .fromTo(prizeCard,
+      {opacity:0,y:58,scale:0.55},
+      {opacity:1,y:0,scale:1,duration:0.5,ease:"back.out(1.5)"},
+      "-=0.1"
+    );
+
+  wonPrizes.push(prize);
+  pickCount++;
+  const thisPick=pickCount;
+  picksRemaining--;
+  if(prize.extra){picksRemaining++;totalPicks++;}
+  setTimeout(()=>{addLog(prize,thisPick);updateDots();},650);
+  setTimeout(()=>{
+    if(picksRemaining<=0){
+      gameOver=true;
+      setInstruction("All done! See your prizes below.");
+      setTimeout(showWinModal,700);
+    } else {
+      setInstruction(prize.extra
+        ?`Extra key awarded! ${picksRemaining} key${picksRemaining>1?"s":""} remaining — choose your next chest.`
+        :`Nice! ${picksRemaining} key${picksRemaining>1?"s":""} remaining — choose your next chest.`);
+    }
+  },700);
+}
+
+function init(){
+  picksRemaining=2;totalPicks=2;pickCount=0;gameOver=false;wonPrizes=[];highlightedEl=null;
+  document.getElementById("log").innerHTML="";
+  setInstruction("Use your 2 Keys to Open Chests and Win Prizes!");
+  const grid=document.getElementById("grid");
+  grid.innerHTML="";
+  const prizes=shuffle(PRIZES);
+  prizes.forEach((prize,i)=>{
+    const cell=document.createElement("div");
+    cell.className="chest-cell";
+    cell.innerHTML=`
+      <div class="prize-card">
+        <div class="pr-icon">${prize.icon}</div>
+        <div class="pr-name">${prize.label}</div>
+        ${prize.sub?`<div class="pr-val">${prize.sub}</div>`:""}
+        ${prize.extra?`<div class="pr-extra">+ EXTRA PICK</div>`:""}
+      </div>
+      <div class="chest-wrap">
+        <img class="chest-img" src="chest-closed.png" alt="chest"/>
+        <img class="chest-img-open" src="chest-open.png" alt="open chest"/>
+      </div>`;
+    grid.appendChild(cell);
+
+    if(isTouchDevice()){
+      cell.addEventListener("click",()=>{
+        if(gameOver||picksRemaining<=0||cell.classList.contains("picked"))return;
+        if(highlightedEl===cell){
+          openChest(cell,prize);
+        } else {
+          if(highlightedEl){highlightedEl.classList.remove("highlighted");}
+          highlightedEl=cell;
+          cell.classList.add("highlighted");
+          setInstruction("Tap again to open this chest!");
+        }
+      });
+    } else {
+      cell.addEventListener("click",()=>openChest(cell,prize));
+    }
+  });
+  updateDots();
+}
+
+init();
+</script>
+</body>
+</html>
